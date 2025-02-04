@@ -10,9 +10,8 @@ namespace Dennis.Tools
     {
         #region Fields
 
-        private static List<Object> SelectionHistory = new List<Object>();
+        private static readonly List<Object> SelectionHistory = new List<Object>();
         private static int CurrentIndex = -1;
-
         private static int MaxHistoryCount = 20;
 
         private Vector2 _scrollPosition;
@@ -32,11 +31,7 @@ namespace Dennis.Tools
         private void OnEnable()
         {
             Selection.selectionChanged += OnSelectionChanged;
-            SelectedIcon = AssetDatabase.LoadAssetAtPath<Texture2D>("Assets/Unity-Selection-Tracker-Window/Image/selected_icon.png");
-            if (SelectedIcon == null)
-            {
-                Debug.LogWarning("SelectedIcon not found. Please check the path.");
-            }
+            LoadSelectedIcon();
         }
 
         private void OnDisable()
@@ -77,7 +72,7 @@ namespace Dennis.Tools
 
             GUILayout.FlexibleSpace();
 
-            DrawNavigationButton("Delete", DeleteSelectedHistory, () => SelectionHistory.Count > 0 && CurrentIndex >= 0);
+            DrawNavigationButton("Delete", DeleteSelectedHistory, () => IsValidSelection(CurrentIndex));
             DrawNavigationButton("Clear", ClearHistory, () => SelectionHistory.Count > 0);
 
             EditorGUILayout.EndHorizontal();
@@ -88,7 +83,7 @@ namespace Dennis.Tools
         {
             GUILayout.Label("Selection History", EditorStyles.boldLabel);
 
-            SelectionHistory.RemoveAll(item => item == null);
+            RemoveInvalidSelections();
             _scrollPosition = GUILayout.BeginScrollView(_scrollPosition);
 
             for (int i = 0; i < SelectionHistory.Count; i++)
@@ -103,7 +98,7 @@ namespace Dennis.Tools
         {
             Object selectedObject = SelectionHistory[index];
 
-            if (!IsValidSelection(selectedObject, index)) return;
+            if (!IsValidSelection(index)) return;
 
             string itemName = selectedObject.name;
             bool isSelected = (index == CurrentIndex);
@@ -113,6 +108,8 @@ namespace Dennis.Tools
 
             EditorGUILayout.BeginHorizontal();
 
+            GUIContent icon = EditorGUIUtility.ObjectContent(selectedObject, selectedObject.GetType());
+
             if (isSelected)
             {
                 GUILayout.Label(SelectedIcon, GUILayout.Width(20), GUILayout.Height(20));
@@ -120,7 +117,6 @@ namespace Dennis.Tools
             }
             else
             {
-                GUIContent icon = EditorGUIUtility.ObjectContent(selectedObject, selectedObject.GetType());
                 if (GUILayout.Button(new GUIContent($" {itemName} ", icon.image), itemStyle))
                 {
                     SetCurrentSelection(index);
@@ -129,38 +125,6 @@ namespace Dennis.Tools
 
             EditorGUILayout.EndHorizontal();
             GUI.color = defaultColor;
-        }
-
-        private bool IsValidSelection(Object selectedObject, int index)
-        {
-            if (selectedObject == null)
-            {
-                SelectionHistory.RemoveAt(index);
-                CurrentIndex = Mathf.Clamp(CurrentIndex, 0, SelectionHistory.Count - 1);
-                return false;
-            }
-            return true;
-        }
-
-        private void DrawSelectionText(string itemName, bool isSelected, int index, GUIStyle itemStyle)
-        {
-            GUILayout.BeginVertical();
-            GUILayout.FlexibleSpace();
-
-            if (isSelected)
-            {
-                GUILayout.Label($" {itemName} ", itemStyle);
-            }
-            else
-            {
-                if (GUILayout.Button($" {itemName} ", itemStyle))
-                {
-                    SetCurrentSelection(index);
-                }
-            }
-
-            GUILayout.FlexibleSpace();
-            GUILayout.EndVertical();
         }
 
         private void DrawNavigationButton(string label, System.Action onClick, System.Func<bool> isEnabled)
@@ -181,31 +145,26 @@ namespace Dennis.Tools
         private static void OnSelectionChanged()
         {
             if (Selection.activeObject == null) return;
-            if (CurrentIndex >= 0 && SelectionHistory[CurrentIndex] == Selection.activeObject) return;
 
-            // Remove the selections while null
-            SelectionHistory.RemoveAll(item => item == null);
+            RemoveInvalidSelections();
 
-            if (CurrentIndex < SelectionHistory.Count - 1)
+            if (!IsValidSelection(CurrentIndex))
             {
-                SelectionHistory.RemoveRange(CurrentIndex + 1, SelectionHistory.Count - CurrentIndex - 1);
+                CurrentIndex = SelectionHistory.Count - 1;
             }
 
+            if (IsValidSelection(CurrentIndex) && SelectionHistory[CurrentIndex] == Selection.activeObject) return;
+
+            TruncateFutureHistory();
             SelectionHistory.Add(Selection.activeObject);
+            CurrentIndex = Mathf.Clamp(SelectionHistory.Count - 1, -1, SelectionHistory.Count - 1);
 
-            if (SelectionHistory.Count > MaxHistoryCount)
-            {
-                SelectionHistory.RemoveAt(0);
-            }
-
-            CurrentIndex = Mathf.Clamp(SelectionHistory.Count - 1, -1, MaxHistoryCount - 1);
             EditorWindowUtils.GetWindowWithoutFocus<SelectionTrackerWindow>()?.Repaint();
         }
 
         private static void SetCurrentSelection(int index)
         {
-            if (SelectionHistory == null || SelectionHistory.Count == 0) return;
-            if (index < 0 || index >= SelectionHistory.Count) return;
+            if (!IsValidSelection(index)) return;
 
             CurrentIndex = index;
             FocusOnProjectView(SelectionHistory[CurrentIndex]);
@@ -213,10 +172,9 @@ namespace Dennis.Tools
 
         private static void DeleteSelectedHistory()
         {
-            if (SelectionHistory.Count == 0 || CurrentIndex < 0 || CurrentIndex >= SelectionHistory.Count) return;
+            if (!IsValidSelection(CurrentIndex)) return;
 
             SelectionHistory.RemoveAt(CurrentIndex);
-
             CurrentIndex = Mathf.Clamp(CurrentIndex, 0, SelectionHistory.Count - 1);
 
             if (SelectionHistory.Count == 0)
@@ -239,7 +197,7 @@ namespace Dennis.Tools
 
         private static void NavigateBackward()
         {
-            if (CurrentIndex <= 0) return;
+            if (!IsValidSelection(CurrentIndex - 1)) return;
 
             CurrentIndex--;
             FocusOnProjectView(SelectionHistory[CurrentIndex]);
@@ -247,7 +205,7 @@ namespace Dennis.Tools
 
         private static void NavigateForward()
         {
-            if (CurrentIndex >= SelectionHistory.Count - 1) return;
+            if (!IsValidSelection(CurrentIndex + 1)) return;
 
             CurrentIndex++;
             FocusOnProjectView(SelectionHistory[CurrentIndex]);
@@ -263,6 +221,33 @@ namespace Dennis.Tools
 
             Selection.activeObject = obj;
             EditorApplication.ExecuteMenuItem("Window/General/Project");
+        }
+
+        private static void LoadSelectedIcon()
+        {
+            SelectedIcon = AssetDatabase.LoadAssetAtPath<Texture2D>("Assets/Unity-Selection-Tracker-Window/Image/selected_icon.png");
+            if (SelectedIcon == null)
+            {
+                Debug.LogWarning("SelectedIcon not found. Please check the path.");
+            }
+        }
+
+        private static void RemoveInvalidSelections()
+        {
+            SelectionHistory.RemoveAll(item => item == null);
+        }
+
+        private static bool IsValidSelection(int index)
+        {
+            return index >= 0 && index < SelectionHistory.Count;
+        }
+
+        private static void TruncateFutureHistory()
+        {
+            if (CurrentIndex < SelectionHistory.Count - 1)
+            {
+                SelectionHistory.RemoveRange(CurrentIndex + 1, SelectionHistory.Count - CurrentIndex - 1);
+            }
         }
 
         #endregion
