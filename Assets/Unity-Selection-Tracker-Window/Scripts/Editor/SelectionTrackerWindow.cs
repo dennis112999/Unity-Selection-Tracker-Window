@@ -32,7 +32,7 @@ namespace Dennis.Tools
         private void OnEnable()
         {
             Selection.selectionChanged += OnSelectionChanged;
-            SelectedIcon = AssetDatabase.LoadAssetAtPath<Texture2D>("Assets/Image/selected_icon.png");
+            SelectedIcon = AssetDatabase.LoadAssetAtPath<Texture2D>("Assets/Unity-Selection-Tracker-Window/Image/selected_icon.png");
             if (SelectedIcon == null)
             {
                 Debug.LogWarning("SelectedIcon not found. Please check the path.");
@@ -103,13 +103,7 @@ namespace Dennis.Tools
         {
             Object selectedObject = SelectionHistory[index];
 
-            // Check selected object is deleted or not
-            if (selectedObject == null)
-            {
-                SelectionHistory.RemoveAt(index);
-                CurrentIndex = Mathf.Clamp(CurrentIndex, 0, SelectionHistory.Count - 1);
-                return;
-            }
+            if (!IsValidSelection(selectedObject, index)) return;
 
             string itemName = selectedObject.name;
             bool isSelected = (index == CurrentIndex);
@@ -126,7 +120,8 @@ namespace Dennis.Tools
             }
             else
             {
-                if (GUILayout.Button($" {itemName} ", itemStyle))
+                GUIContent icon = EditorGUIUtility.ObjectContent(selectedObject, selectedObject.GetType());
+                if (GUILayout.Button(new GUIContent($" {itemName} ", icon.image), itemStyle))
                 {
                     SetCurrentSelection(index);
                 }
@@ -134,6 +129,38 @@ namespace Dennis.Tools
 
             EditorGUILayout.EndHorizontal();
             GUI.color = defaultColor;
+        }
+
+        private bool IsValidSelection(Object selectedObject, int index)
+        {
+            if (selectedObject == null)
+            {
+                SelectionHistory.RemoveAt(index);
+                CurrentIndex = Mathf.Clamp(CurrentIndex, 0, SelectionHistory.Count - 1);
+                return false;
+            }
+            return true;
+        }
+
+        private void DrawSelectionText(string itemName, bool isSelected, int index, GUIStyle itemStyle)
+        {
+            GUILayout.BeginVertical();
+            GUILayout.FlexibleSpace();
+
+            if (isSelected)
+            {
+                GUILayout.Label($" {itemName} ", itemStyle);
+            }
+            else
+            {
+                if (GUILayout.Button($" {itemName} ", itemStyle))
+                {
+                    SetCurrentSelection(index);
+                }
+            }
+
+            GUILayout.FlexibleSpace();
+            GUILayout.EndVertical();
         }
 
         private void DrawNavigationButton(string label, System.Action onClick, System.Func<bool> isEnabled)
