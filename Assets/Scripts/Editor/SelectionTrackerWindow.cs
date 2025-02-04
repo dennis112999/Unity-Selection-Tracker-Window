@@ -77,6 +77,7 @@ namespace Dennis.Tools
 
             GUILayout.FlexibleSpace();
 
+            DrawNavigationButton("Delete", DeleteSelectedHistory, () => SelectionHistory.Count > 0 && CurrentIndex >= 0);
             DrawNavigationButton("Clear", ClearHistory, () => SelectionHistory.Count > 0);
 
             EditorGUILayout.EndHorizontal();
@@ -166,6 +167,22 @@ namespace Dennis.Tools
 
             CurrentIndex = index;
             FocusOnProjectView(SelectionHistory[CurrentIndex]);
+        }
+
+        private static void DeleteSelectedHistory()
+        {
+            if (SelectionHistory.Count == 0 || CurrentIndex < 0 || CurrentIndex >= SelectionHistory.Count) return;
+
+            SelectionHistory.RemoveAt(CurrentIndex);
+
+            CurrentIndex = Mathf.Clamp(CurrentIndex, 0, SelectionHistory.Count - 1);
+
+            if (SelectionHistory.Count == 0)
+            {
+                CurrentIndex = -1;
+            }
+
+            EditorWindowUtils.GetWindowWithoutFocus<SelectionTrackerWindow>()?.Repaint();
         }
 
         private static void ClearHistory()
