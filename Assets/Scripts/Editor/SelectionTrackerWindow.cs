@@ -87,6 +87,8 @@ namespace Dennis.Tools
         private void DrawSelectionHistory()
         {
             GUILayout.Label("Selection History", EditorStyles.boldLabel);
+
+            SelectionHistory.RemoveAll(item => item == null);
             _scrollPosition = GUILayout.BeginScrollView(_scrollPosition);
 
             for (int i = 0; i < SelectionHistory.Count; i++)
@@ -99,7 +101,17 @@ namespace Dennis.Tools
 
         private void DrawSelectionItem(int index)
         {
-            string itemName = SelectionHistory[index]?.name ?? "Unnamed";
+            Object selectedObject = SelectionHistory[index];
+
+            // Check selected object is deleted or not
+            if (selectedObject == null)
+            {
+                SelectionHistory.RemoveAt(index);
+                CurrentIndex = Mathf.Clamp(CurrentIndex, 0, SelectionHistory.Count - 1);
+                return;
+            }
+
+            string itemName = selectedObject.name;
             bool isSelected = (index == CurrentIndex);
 
             GUIStyle itemStyle = isSelected ? EditorStyles.label : EditorStyles.miniButton;
@@ -144,6 +156,9 @@ namespace Dennis.Tools
             if (Selection.activeObject == null) return;
             if (CurrentIndex >= 0 && SelectionHistory[CurrentIndex] == Selection.activeObject) return;
 
+            // Remove the selections while null
+            SelectionHistory.RemoveAll(item => item == null);
+
             if (CurrentIndex < SelectionHistory.Count - 1)
             {
                 SelectionHistory.RemoveRange(CurrentIndex + 1, SelectionHistory.Count - CurrentIndex - 1);
@@ -156,7 +171,7 @@ namespace Dennis.Tools
                 SelectionHistory.RemoveAt(0);
             }
 
-            CurrentIndex = SelectionHistory.Count - 1;
+            CurrentIndex = Mathf.Clamp(SelectionHistory.Count - 1, -1, MaxHistoryCount - 1);
             EditorWindowUtils.GetWindowWithoutFocus<SelectionTrackerWindow>()?.Repaint();
         }
 
